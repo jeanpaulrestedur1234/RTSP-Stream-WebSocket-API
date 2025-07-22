@@ -1,0 +1,42 @@
+# Entorno virtual
+venv/
+ENV/
+env/
+.venv/
+.ENV/
+.env/
+
+# Archivos y carpetas de caché de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.p~ # Backups
+
+# Archivos de distribución
+*.egg-info/
+.eggs/
+*.egg
+dist/
+build/
+
+# Archivos de configuración local
+.env
+*.env
+
+# Archivos de log
+*.log
+
+# Carpetas de configuración de IDEs/editores
+.vscode/
+.idea/
+*.sublime*
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de Git (solo necesario si quieres excluirlos en una subcarpeta, pero normalmente no se ignora el .git del root)
+# .git
+# .gitignore

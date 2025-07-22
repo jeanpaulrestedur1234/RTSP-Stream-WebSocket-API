@@ -1,0 +1,29 @@
+# Carpetas ocultas (como __pycache__)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Archivos de configuración locales o entornos
+.env
+*.env
+
+# Archivos de log
+*.log
+
+# Archivos y carpetas de sistema
+.DS_Store
+Thumbs.db
+
+# Carpeta de caché de Python
+*.egg-info/
+.eggs/
+*.egg
+
+# Carpetas específicas de IDEs/editores
+.vscode/
+.idea/
+
+# Git
+.git
+.gitignore

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<style>
+  body {
+    font-family: sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+  }
+
+  h2 {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  #cameras {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 20px;
+  }
+
+  .camera-box {
+    background: white;
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    text-align: center;
+  }
+
+  .camera-box h3 {
+    font-size: 16px;
+    margin-bottom: 10px;
+  }
+
+  .camera-box img {
+    width: 100%;
+    max-width: 640px;
+    height: auto;
+    border-radius: 5px;
+  }
+</style>
+
+<head>
+  <title>RTSP a WebSocket - Múltiples Cámaras</title>
+</head>
+
+<body>
+  <h2>Streaming en tiempo real - Múltiples Cámaras</h2>
+
+  <div id="cameras"></div>
+
+  <script>
+
+    const list = [
+      {
+        "url": "rtsp://192.168.20.20:554/sms/HCPEurl/commonvideobiz_DNtQ%2BplnelJ3EtbqAoBe%2BkXMGbqsitftunxu0tBeq9lwlp5PqtZ2RYVUYAjYgwUXPyGFb9ao107y61QyviUeRIpcdRS0E576GVKOR%2FqkbKhVk9bKzYF1TCXBOwWdRKeOOpQsw%2FSUB3EX9hB79Xr7MTT8I3ynht4FKtKU8llPivPoDtFmejZwJJO2wgkakM7DNNz09fG3aAPzY9RWpzBRhbZroEUyvcHx603mKl1wjtYv7GDgDw7AGDvKQ4ftdZgQoObxdTq107%2BK9cG3C0Ffcw%3D%3D",
+        "authentication": ""
+      },
+    
+      {
+        "url": "rtsp://192.168.20.20:554/sms/HCPEurl/commonvideobiz_DNtQ%2BplnelJ3EtbqAoBe%2BkXMGbqsitftunxu0tBeq9m3i8LXdIkE7mdcF608B9ucbvOpdbMPUdemrrFencdIFw9Kr%2BlP4C%2BTF7F7rhAcfD24mmOQ8zZNoI4U0YSKhCNwYaqtW5uOLMv%2BQVG3x5dOXysI%2F9L05vvJ7d6tXD2KtoaZCGB3G%2BjLtFtYM%2BiFYgpVudaUAIMRP5wz457yL3V1eBrrO4TN%2FP9AKlYmYfcxCC3FeWAqsLs8S2Ox9lne1l8shKAdKCv79opqSxRq9yeCzQ%3D%3D",
+        "authentication": ""
+      },
+     
+      {
+        "url": "rtsp://192.168.20.20:554/sms/HCPEurl/commonvideobiz_DNtQ%2BplnelJ3EtbqAoBe%2BkXMGbqsitftunxu0tBeq9niCJ7urIgONtSvJ7eAt0XQhMTuTNI37tb%2B%2FSXYDnOK7LTB1z3TkTvAKOcBzCvYiAwcIxyfODHeFbd03VeFg4%2FZbAvK6Xc%2FwYRkzTulWT8uvtm04IRjAJ96Bj4ekZpO7Juvgm39PkHVnaTpDuxkDdUBegmOnmwShIE7dJ4E7qbu3p7SxNYk%2Fl4xY%2FQ13mvqFAxbrl%2B193nxUJtJ0q71qW4dVKPzJK5VF6TDxJ86oHIFSw%3D%3D",
+        "authentication": ""
+      }
+    ]
+    const container = document.getElementById("cameras");
+
+    list.forEach((cam, index) => {
+      const rtsp = cam.url;
+      const cameraIndex = `cam${index + 1}`;
+      const encodedRtsp = encodeURIComponent(rtsp);
+      const ws = new WebSocket(`wss://fs20256-meerkat.tail04ca2e.ts.net/ws?rtsp=${encodedRtsp}&camera_index=${cameraIndex}`);
+      ws.binaryType = "arraybuffer";
+
+      const cameraBox = document.createElement("div");
+      cameraBox.className = "camera-box";
+
+      const title = document.createElement("h3");
+      title.textContent = `Cámara ${cameraIndex}`;
+      cameraBox.appendChild(title);
+
+      const img = document.createElement("img");
+      cameraBox.appendChild(img);
+
+      let lastUrl = null;
+      ws.onmessage = (event) => {
+        const blob = new Blob([event.data], { type: "image/jpeg" });
+        if (lastUrl) URL.revokeObjectURL(lastUrl);
+        lastUrl = URL.createObjectURL(blob);
+        img.src = lastUrl;
+      };
+
+      ws.onerror = (e) => console.error(`Error en cámara ${cameraIndex}:`, e);
+      ws.onclose = () => console.warn(`WebSocket cerrado: ${cameraIndex}`);
+
+      container.appendChild(cameraBox);
+    });
+  </script>
+</body>
+
+</html>
