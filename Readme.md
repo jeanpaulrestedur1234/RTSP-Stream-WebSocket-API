@@ -120,9 +120,4 @@ Desarrollado por Jean Paul. Proyecto para transmisión eficiente de cámaras IP 
 * **❌ No se pudo abrir la cámara**: Verifica que la URL RTSP sea accesible y que no esté siendo usada por otra app.
 * **🐢 Cliente lento**: Tu cliente está tardando en recibir o procesar frames; reduce la calidad o resolución.
 
----
 
-```
-
-¿Quieres que también genere un ejemplo de cliente HTML que reciba la transmisión?
-```
