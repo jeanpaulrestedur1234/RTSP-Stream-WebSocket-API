@@ -58,7 +58,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8003
 docker build -t rtsp-stream-ws .
 
 # 2. Ejecutar contenedor
-docker run -p 8003:8003 rtsp-stream-ws
+docker run -p 8000:8000 rtsp-stream-ws
 ```
 
 ---
