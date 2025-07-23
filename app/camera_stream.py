@@ -1,17 +1,16 @@
 import cv2
-import numpy as np
-import time
-
 import asyncio
-from collections import defaultdict
+import time
 
 class CameraStream:
     def __init__(self, rtsp_url: str):
         self.rtsp_url = rtsp_url
-        self.clients = {}  # websocket -> None (ya no necesitamos una cola por cliente)
+        self.clients = {}  # websocket -> task
         self.running = False
         self.capture = None
-        self.latest_frame = None  # Almacenará el último frame capturado
+        self.latest_frame = None
+        self.frame_queue = asyncio.Queue(maxsize=1)
+        self.last_reset_time = time.time()
 
     async def start(self):
         if self.running:
@@ -30,45 +29,55 @@ class CameraStream:
     async def _relay_loop(self):
         while self.running:
             start = time.perf_counter()
+
+            # ⏳ Reiniciar conexión cada 30 segundos
+            if time.time() - self.last_reset_time >= 60:
+                print("🔁 Reiniciando conexión a cámara (cada 60s)")
+                self.capture.release()
+                self.capture = cv2.VideoCapture(self.rtsp_url)
+                self.last_reset_time = time.time()
+                continue
+
             if not self.capture or not self.capture.isOpened():
                 print("🔄 Reintentando conexión a la cámara...")
                 self.capture = cv2.VideoCapture(self.rtsp_url)
-                await asyncio.sleep(0.5)
+                self.last_reset_time = time.time()
                 continue
-            for _ in range(15):
+
+            for _ in range(15):  # Limpiar buffer
                 self.capture.read()
 
-
-            self.capture.grab()  # Avanza sin decodificar
+            self.capture.grab()
             ret, frame = self.capture.retrieve()
             if not ret:
                 continue
 
-            # ⚡ REDUCIR resolución (mejora tiempo de codificación y red)
-            frame = cv2.resize(frame, (640, 360))  # Puedes probar también (480, 270)
-
-            # 🔧 COMPRESIÓN JPEG: reduce tamaño del frame
-            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]  # Calidad baja-media
-            success, jpeg = cv2.imencode('.jpg', frame, encode_param)
+            frame = cv2.resize(frame, (640, 360))
+            success, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
             if not success:
                 continue
 
-            self.latest_frame = jpeg.tobytes()
+            jpeg_bytes = jpeg.tobytes()
+            if jpeg_bytes == self.latest_frame:
+                print("⚠️ Frame duplicado, omitiendo")
+                continue
 
-            # 🔥 Enviar el último frame a todos los clientes conectados
-            tasks = [self._client_sender(websocket) for websocket in self.clients]
-            await asyncio.gather(*tasks)
+            self.latest_frame = jpeg_bytes
 
+            # 📨 Publicar en el canal
+            if self.frame_queue.full():
+                await self.frame_queue.get()  # Borrar frame viejo
+            await self.frame_queue.put(jpeg_bytes)
 
             duration = time.perf_counter() - start
-            print(f"📸 Frame enviado a {len(self.clients)} clientes | {duration*1000:.1f} ms")
             if duration > 0.850:
                 print(f"⚠️ Demora excesiva ({duration*1000:.1f} ms), reiniciando captura")
                 self.capture.release()
                 self.capture = None
+                self.last_reset_time = time.time()
                 continue
 
-            await asyncio.sleep(1 / 24)  # 24 FPS target
+            await asyncio.sleep(1 / 100)
 
         await self.stop()
 
@@ -76,36 +85,32 @@ class CameraStream:
         if websocket in self.clients:
             return
 
-        self.clients[websocket] = None  # Ya no se necesita una cola
-        print(f"➕ Cliente conectado ({len(self.clients)} total)")
-
-        if len(self.clients) == 1:
+        print(f"➕ Cliente conectado ({len(self.clients) + 1} total)")
+        if len(self.clients) == 0:
             await self.start()
-        
-        # Envía el frame actual al nuevo cliente
-        if self.latest_frame:
-            asyncio.create_task(self._client_sender(websocket))
 
+        task = asyncio.create_task(self._client_listener(websocket))
+        self.clients[websocket] = task
 
-    async def _client_sender(self, websocket):
-        if not self.latest_frame:
-            return # No hay frame para enviar
-
+    async def _client_listener(self, websocket):
         try:
-            start = time.perf_counter()
-            await websocket.send_bytes(self.latest_frame)
-            delay = time.perf_counter() - start
-            if delay > 0.1:
-                print(f"🐢 Cliente lento: {delay:.3f}s")
+            while True:
+                frame = await self.frame_queue.get()
+                await websocket.send_bytes(frame)
         except Exception as e:
             print(f"❌ Cliente desconectado: {e}")
+        finally:
             await self.remove_client(websocket)
 
-
     async def remove_client(self, websocket):
-        if websocket in self.clients:
-            del self.clients[websocket]
-            print(f"➖ Cliente desconectado ({len(self.clients)} restantes)")
+        task = self.clients.pop(websocket, None)
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        print(f"➖ Cliente desconectado ({len(self.clients)} restantes)")
         if not self.clients:
             await self.stop()
 
@@ -114,4 +119,4 @@ class CameraStream:
         if self.capture:
             self.capture.release()
             self.capture = None
-            print("🛑 Cámara detenida")
+        print("🛑 Cámara detenida")
