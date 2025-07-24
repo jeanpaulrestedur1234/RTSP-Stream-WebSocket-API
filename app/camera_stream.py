@@ -30,23 +30,9 @@ class CameraStream:
         self.capture = cv2.VideoCapture(self.rtsp_url)
 
         while self.running:
-            start_time = time.perf_counter()
 
-            # Reiniciar conexión cada 60 segundos
-            if time.time() - self.last_reset_time >= 60:
-                print("🔁 Reiniciando conexión (cada 60s)")
-                self.capture.release()
-                self.capture = cv2.VideoCapture(self.rtsp_url)
-                self.last_reset_time = time.time()
-                await asyncio.sleep(1)
-                continue
+            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-            if not self.capture or not self.capture.isOpened():
-                print("🔄 Reintentando conexión...")
-                self.capture = cv2.VideoCapture(self.rtsp_url)
-                self.last_reset_time = time.time()
-                await asyncio.sleep(1)
-                continue
 
             # Captura sin leer frames viejos
             self.capture.grab()
@@ -56,7 +42,7 @@ class CameraStream:
                 continue
 
             frame = cv2.resize(frame, (640, 360))
-            success, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+            success, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 35])
             if not success:
                 continue
 
@@ -72,13 +58,7 @@ class CameraStream:
                 _ = await self.frame_queue.get()
             await self.frame_queue.put(jpeg_bytes)
 
-            duration = time.perf_counter() - start_time
-            if duration > 0.5:
-                print(f"⚠️ Lento ({duration*1000:.0f} ms), reiniciando cámara")
-                self.capture.release()
-                self.capture = None
-                self.last_reset_time = time.time()
-                continue
+           
 
             await asyncio.sleep(1 / 15)  # ~15 FPS
 
