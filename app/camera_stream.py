@@ -27,29 +27,32 @@ class CameraStream:
         asyncio.create_task(self._relay_loop())
 
     async def _relay_loop(self):
-        while self.running:
-            start = time.perf_counter()
+        self.capture = cv2.VideoCapture(self.rtsp_url)
 
-            # ⏳ Reiniciar conexión cada 30 segundos
+        while self.running:
+            start_time = time.perf_counter()
+
+            # Reiniciar conexión cada 60 segundos
             if time.time() - self.last_reset_time >= 60:
-                print("🔁 Reiniciando conexión a cámara (cada 60s)")
+                print("🔁 Reiniciando conexión (cada 60s)")
                 self.capture.release()
                 self.capture = cv2.VideoCapture(self.rtsp_url)
                 self.last_reset_time = time.time()
+                await asyncio.sleep(1)
                 continue
 
             if not self.capture or not self.capture.isOpened():
-                print("🔄 Reintentando conexión a la cámara...")
+                print("🔄 Reintentando conexión...")
                 self.capture = cv2.VideoCapture(self.rtsp_url)
                 self.last_reset_time = time.time()
+                await asyncio.sleep(1)
                 continue
 
-            for _ in range(15):  # Limpiar buffer
-                self.capture.read()
-
+            # Captura sin leer frames viejos
             self.capture.grab()
             ret, frame = self.capture.retrieve()
             if not ret:
+                await asyncio.sleep(0.1)
                 continue
 
             frame = cv2.resize(frame, (640, 360))
@@ -64,22 +67,20 @@ class CameraStream:
 
             self.latest_frame = jpeg_bytes
 
-            # 📨 Publicar en el canal
+            # Reemplazar frame anterior
             if self.frame_queue.full():
-                await self.frame_queue.get()  # Borrar frame viejo
+                _ = await self.frame_queue.get()
             await self.frame_queue.put(jpeg_bytes)
 
-            duration = time.perf_counter() - start
-            if duration > 0.850:
-                print(f"⚠️ Demora excesiva ({duration*1000:.1f} ms), reiniciando captura")
+            duration = time.perf_counter() - start_time
+            if duration > 0.5:
+                print(f"⚠️ Lento ({duration*1000:.0f} ms), reiniciando cámara")
                 self.capture.release()
                 self.capture = None
                 self.last_reset_time = time.time()
                 continue
 
-            await asyncio.sleep(1 / 100)
-
-        await self.stop()
+            await asyncio.sleep(1 / 15)  # ~15 FPS
 
     async def add_client(self, websocket):
         if websocket in self.clients:
