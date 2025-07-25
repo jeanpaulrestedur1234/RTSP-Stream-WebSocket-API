@@ -9,7 +9,7 @@ class CameraStream:
         self.running = False
         self.capture = None
         self.latest_frame = None
-        self.frame_queue = asyncio.Queue(maxsize=1)
+        self.frame_lock = asyncio.Lock()  # Protección para acceso concurrente
         self.last_reset_time = time.time()
 
     async def start(self):
@@ -27,40 +27,38 @@ class CameraStream:
         asyncio.create_task(self._relay_loop())
 
     async def _relay_loop(self):
-        self.capture = cv2.VideoCapture(self.rtsp_url)
+        frame_count = 0
+        last_fps_time = time.time()
 
         while self.running:
+            for _ in range(5):  # Puedes bajar a 3 o 5 si quieres menos latencia
+                self.capture.read()
 
-            self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-
-
-            # Captura sin leer frames viejos
             self.capture.grab()
             ret, frame = self.capture.retrieve()
             if not ret:
-                await asyncio.sleep(0.1)
                 continue
 
             frame = cv2.resize(frame, (640, 360))
-            success, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 35])
+            success, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
             if not success:
                 continue
 
             jpeg_bytes = jpeg.tobytes()
-            if jpeg_bytes == self.latest_frame:
-                print("⚠️ Frame duplicado, omitiendo")
-                continue
 
-            self.latest_frame = jpeg_bytes
+            async with self.frame_lock:
+                self.latest_frame = jpeg_bytes
 
-            # Reemplazar frame anterior
-            if self.frame_queue.full():
-                _ = await self.frame_queue.get()
-            await self.frame_queue.put(jpeg_bytes)
+            frame_count += 1
+            current_time = time.time()
+            if current_time - last_fps_time >= 1:
+                print(f"📦 FPS enviados: {frame_count}")
+                frame_count = 0
+                last_fps_time = current_time
 
-           
+            await asyncio.sleep(1 / 30)  # Intenta 30 FPS
 
-            await asyncio.sleep(1 / 15)  # ~15 FPS
+        await self.stop()
 
     async def add_client(self, websocket):
         if websocket in self.clients:
@@ -70,14 +68,16 @@ class CameraStream:
         if len(self.clients) == 0:
             await self.start()
 
-        task = asyncio.create_task(self._client_listener(websocket))
+        task = asyncio.create_task(self._client_sender(websocket))
         self.clients[websocket] = task
 
-    async def _client_listener(self, websocket):
+    async def _client_sender(self, websocket):
         try:
             while True:
-                frame = await self.frame_queue.get()
-                await websocket.send_bytes(frame)
+                await asyncio.sleep(1 / 30)  # Ritmo de envío
+                async with self.frame_lock:
+                    if self.latest_frame:
+                        await websocket.send_bytes(self.latest_frame)
         except Exception as e:
             print(f"❌ Cliente desconectado: {e}")
         finally:
