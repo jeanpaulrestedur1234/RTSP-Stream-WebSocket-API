@@ -5,3 +5,4 @@ numpy
 websockets
 pytest
 httpx
+av
