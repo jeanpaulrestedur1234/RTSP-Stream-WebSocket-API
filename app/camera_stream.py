@@ -1,62 +1,63 @@
-import cv2
+import av
 import asyncio
-import time
+import numpy as np
+import cv2
 
 class CameraStream:
     def __init__(self, rtsp_url: str):
         self.rtsp_url = rtsp_url
         self.clients = {}  # websocket -> task
         self.running = False
-        self.capture = None
         self.latest_frame = None
-        self.frame_lock = asyncio.Lock()  # Protección para acceso concurrente
-        self.last_reset_time = time.time()
+        self.frame_lock = asyncio.Lock()
+        self._task = None
 
     async def start(self):
         if self.running:
             return
         self.running = True
-        self.capture = cv2.VideoCapture(self.rtsp_url)
-
-        if not self.capture.isOpened():
-            print(f"❌ No se pudo abrir la cámara: {self.rtsp_url}")
-            self.running = False
-            return
-
-        print("🎥 Cámara iniciada")
-        asyncio.create_task(self._relay_loop())
+        self._task = asyncio.create_task(self._relay_loop())
+        print(f"🎥 Cámara iniciada: {self.rtsp_url}")
 
     async def _relay_loop(self):
-        frame_count = 0
-        last_fps_time = time.time()
+        try:
+            container = av.open(self.rtsp_url, options={"rtsp_transport": "tcp"})
+            stream = container.streams.video[0]
+            stream.thread_type = "AUTO"
 
-        while self.running:
-            for _ in range(5):  # Puedes bajar a 3 o 5 si quieres menos latencia
-                self.capture.read()
+            frame_count = 0
+            last_time = asyncio.get_event_loop().time()
 
-            self.capture.grab()
-            ret, frame = self.capture.retrieve()
-            if not ret:
-                continue
+            for packet in container.demux(stream):
+                if not self.running:
+                    break
 
-            frame = cv2.resize(frame, (640, 360))
-            success, jpeg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-            if not success:
-                continue
+                for frame in packet.decode():
+                    if not self.running:
+                        break
 
-            jpeg_bytes = jpeg.tobytes()
+                    img = frame.to_ndarray(format="bgr24")
+                    img = cv2.resize(img, (640, 360))
+                    success, jpeg = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+                    if not success:
+                        continue
 
-            async with self.frame_lock:
-                self.latest_frame = jpeg_bytes
+                    jpeg_bytes = jpeg.tobytes()
 
-            frame_count += 1
-            current_time = time.time()
-            if current_time - last_fps_time >= 1:
-                print(f"📦 FPS enviados: {frame_count}")
-                frame_count = 0
-                last_fps_time = current_time
+                    async with self.frame_lock:
+                        self.latest_frame = jpeg_bytes
 
-            await asyncio.sleep(1 / 30)  # Intenta 30 FPS
+                    frame_count += 1
+                    now = asyncio.get_event_loop().time()
+                    if now - last_time >= 1:
+                        print(f"📦 {self.rtsp_url} FPS enviados: {frame_count}")
+                        frame_count = 0
+                        last_time = now
+
+                    await asyncio.sleep(1 / 30)
+
+        except Exception as e:
+            print(f"❌ Error en la cámara {self.rtsp_url}: {e}")
 
         await self.stop()
 
@@ -64,7 +65,7 @@ class CameraStream:
         if websocket in self.clients:
             return
 
-        print(f"➕ Cliente conectado ({len(self.clients) + 1} total)")
+        print(f"➕ Cliente conectado ({len(self.clients) + 1})")
         if len(self.clients) == 0:
             await self.start()
 
@@ -74,7 +75,7 @@ class CameraStream:
     async def _client_sender(self, websocket):
         try:
             while True:
-                await asyncio.sleep(1 / 30)  # Ritmo de envío
+                await asyncio.sleep(1 / 30)
                 async with self.frame_lock:
                     if self.latest_frame:
                         await websocket.send_bytes(self.latest_frame)
@@ -91,13 +92,11 @@ class CameraStream:
                 await task
             except asyncio.CancelledError:
                 pass
-        print(f"➖ Cliente desconectado ({len(self.clients)} restantes)")
+        print(f"➖ Cliente eliminado ({len(self.clients)} restantes)")
+
         if not self.clients:
             await self.stop()
 
     async def stop(self):
         self.running = False
-        if self.capture:
-            self.capture.release()
-            self.capture = None
-        print("🛑 Cámara detenida")
+        print(f"🛑 Deteniendo cámara: {self.rtsp_url}")
