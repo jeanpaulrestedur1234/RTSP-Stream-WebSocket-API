@@ -21,40 +21,50 @@ class CameraStream:
 
     async def _relay_loop(self):
         try:
-            container = av.open(self.rtsp_url, options={"rtsp_transport": "tcp"})
-            stream = container.streams.video[0]
-            stream.thread_type = "AUTO"
+            reconnect_interval = 60  # segundos
+            while self.running:
+                try:
+                    container = av.open(self.rtsp_url, options={"rtsp_transport": "tcp"})
+                    stream = container.streams.video[0]
+                    stream.thread_type = "AUTO"
 
-            frame_count = 0
-            last_time = asyncio.get_event_loop().time()
+                    frame_count = 0
+                    last_time = asyncio.get_event_loop().time()
+                    start_time = last_time
 
-            for packet in container.demux(stream):
-                if not self.running:
-                    break
+                    for packet in container.demux(stream):
+                        if not self.running:
+                            break
 
-                for frame in packet.decode():
-                    if not self.running:
-                        break
+                        for frame in packet.decode():
+                            if not self.running:
+                                break
 
-                    img = frame.to_ndarray(format="bgr24")
-                    img = cv2.resize(img, (640, 360))
-                    success, jpeg = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-                    if not success:
-                        continue
+                            img = frame.to_ndarray(format="bgr24")
+                            img = cv2.resize(img, (640, 360))
+                            success, jpeg = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+                            if not success:
+                                continue
 
-                    jpeg_bytes = jpeg.tobytes()
+                            jpeg_bytes = jpeg.tobytes()
+                            async with self.frame_lock:
+                                self.latest_frame = jpeg_bytes
 
-                    async with self.frame_lock:
-                        self.latest_frame = jpeg_bytes
+                            frame_count += 1
+                            now = asyncio.get_event_loop().time()
 
-                    frame_count += 1
-                    now = asyncio.get_event_loop().time()
-                    if now - last_time >= 1:
-                        print(f"📦 {self.rtsp_url} FPS enviados: {frame_count}")
-                        frame_count = 0
-                        last_time = now
+                            # Limitar a 30 FPS
+                            await asyncio.sleep(max(0, (1 / 30)))
 
-                    await asyncio.sleep(1 / 30)
+                            # Reiniciar el stream cada minuto
+                            if now - start_time >= reconnect_interval:
+                                break
+
+                    container.close()
+
+                except Exception as inner_e:
+                    print(f"❌ Stream error: {inner_e}")
+                    await asyncio.sleep(2)  # Espera antes de reintentar
 
         except Exception as e:
             print(f"❌ Error en la cámara {self.rtsp_url}: {e}")
