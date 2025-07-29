@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtsp-websocket-service
+spec:
+  selector:
+    app: rtsp-websocket
+  type: LoadBalancer  # Usa NodePort o ClusterIP si estás en Minikube o con Ingress
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
