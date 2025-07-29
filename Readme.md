@@ -14,7 +14,7 @@ Ideal para sistemas de videovigilancia, monitoreo remoto o visualización web de
 - 📉 Compresión JPEG ajustable
 - 🧠 Detección de clientes lentos
 - 🧼 Limpieza automática de recursos
-- 🐳 Soporte para Docker y despliegue local
+- 🐳 Soporte para Docker, Docker Compose y Tailscale Funnel
 
 ---
 
@@ -28,7 +28,10 @@ Ideal para sistemas de videovigilancia, monitoreo remoto o visualización web de
 │   ├── camera\_stream.py     # Lógica de transmisión de video
 │   └── stream\_manager.py    # Manejador de múltiples streams
 ├── Dockerfile
+├── docker-compose.yml
+├── Makefile
 ├── requirements.txt
+├── index.html
 └── README.md
 
 ````
@@ -46,59 +49,83 @@ source venv/bin/activate  # En Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 3. Ejecutar servidor
-uvicorn app.main:app --host 0.0.0.0 --port 8003
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ````
 
 ---
 
-## 🐳 Uso con Docker
+## 🐳 Uso con Docker Compose
+
+> Requiere que `docker` esté en ejecución y que tengas `tailscale` configurado si vas a usar funnel.
 
 ```bash
 # 1. Construir imagen
-docker build -t rtsp-stream-ws .
+make build
 
-# 2. Ejecutar contenedor
-docker run -p 8000:8000 rtsp-stream-ws
+# 2. Levantar contenedor
+make up
+
+# 3. Ver logs
+make logs
+
+# 4. Acceder vía WebSocket
+ws://localhost:8000/ws?rtsp=<RTSP_ENCODED_URL>&camera_index=<ID>
 ```
+
+> ✅ Este servicio usa `network_mode: host`, por lo que no se necesita mapear puertos en `docker-compose.yml`.
+
+---
+
+## 🌐 Publicar vía Tailscale Funnel
+
+> Asegúrate de tener `tailscale` instalado y en sesión:
+
+```bash
+# 1. Iniciar Tailscale (solo si no lo habías hecho)
+sudo tailscale up
+
+# 2. Exponer el puerto 8000 públicamente
+make funnel
+```
+
+Accede desde cualquier navegador o app compatible vía Tailscale.
 
 ---
 
 ## 🔌 Conexión WebSocket
 
-Conéctate desde el cliente WebSocket a:
-
-```
-ws://localhost:8003/ws?rtsp=<RTSP_ENCODED_URL>&camera_index=<UNIQUE_ID>
-```
-
-* `rtsp`: URL de la cámara codificada (usar `encodeURIComponent()` en JS)
-* `camera_index`: identificador único para evitar duplicar streams
-
-Ejemplo:
-
 ```js
-const socket = new WebSocket("ws://localhost:8003/ws?rtsp=" + encodeURIComponent("rtsp://192.168.1.100:554/stream1") + "&camera_index=cam1")
+const socket = new WebSocket("ws://localhost:8000/ws?rtsp=" + encodeURIComponent("rtsp://192.168.1.100:554/stream1") + "&camera_index=cam1")
 ```
+
+Parámetros:
+
+* `rtsp`: URL RTSP codificada (usa `encodeURIComponent()` en JS)
+* `camera_index`: identificador único para el stream
 
 ---
 
-## 🧪 Recomendaciones
+## 🛠️ Troubleshooting
 
-* Prueba con varias cámaras simultáneamente para validar concurrencia.
-* Ajusta la resolución (`640x360`) o calidad JPEG en `CameraStream` si hay mucho retardo.
-* Usa un cliente WebSocket con capacidad de recibir `bytes` (ej. navegador con `<img>` y canvas, o Python/Node).
+| Problema                         | Solución                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| ❌ No se pudo abrir la cámara     | Verifica que la URL RTSP sea válida y accesible                            |
+| 🐢 Cliente lento o congelado     | Reduce resolución o tasa de frames                                         |
+| 🐳 Docker no arranca             | Verifica permisos y que Docker esté activo (`sudo systemctl start docker`) |
+| 🚫 `containerd` falla al iniciar | Elimina `/run/containerd/containerd.sock` si es un directorio              |
 
 ---
 
 ## ✅ Requisitos
 
 * Python 3.10 o superior
-* FFmpeg (solo si deseas procesar más allá de OpenCV)
-* Dependencias en `requirements.txt`
+* FFmpeg (instalado en la imagen Docker)
+* Tailscale (para acceso externo opcional)
+* Docker y Docker Compose
 
 ---
 
-## 📦 Dependencias
+## 📦 Dependencias principales
 
 ```text
 fastapi
@@ -111,13 +138,6 @@ numpy
 
 ## 🧠 Créditos
 
-Desarrollado por Jean Paul. Proyecto para transmisión eficiente de cámaras IP en tiempo real.
+Desarrollado por **Jean Paul** – para transmisión eficiente de cámaras IP en tiempo real, ideal para sistemas de monitoreo.
 
 ---
-
-## 🛠️ Troubleshooting
-
-* **❌ No se pudo abrir la cámara**: Verifica que la URL RTSP sea accesible y que no esté siendo usada por otra app.
-* **🐢 Cliente lento**: Tu cliente está tardando en recibir o procesar frames; reduce la calidad o resolución.
-
-
