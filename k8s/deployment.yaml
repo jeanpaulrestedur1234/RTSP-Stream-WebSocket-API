@@ -16,8 +16,8 @@ spec:
     spec:
       containers:
         - name: rtsp-websocket
-          image: rtsp-websocket:latest     
-          imagePullPolicy: Never            
+          image: rtsp-websocket:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 8000
           env:
