@@ -62,10 +62,11 @@ k8s-access:
 	minikube service rtsp-websocket
 
 k8s-funnel:
-	@echo "→ Iniciando port-forward en background..."
-	nohup kubectl port-forward service/rtsp-websocket 30080:8000 --namespace=default > k8s_portforward.log 2>&1 &
-	@sleep 3
-	@echo "→ Iniciando funnel de Tailscale en background..."
+	@echo "→ Port forwarding (K8s service) en background..."
+	nohup kubectl port-forward --address=0.0.0.0 service/rtsp-websocket 30080:8000 > k8s_portforward.log 2>&1 &
+	sleep 3
+	@echo "→ Iniciando Tailscale funnel en background..."
 	nohup sudo tailscale funnel 30080 > k8s_funnel.log 2>&1 &
-	@echo "→ Funnel activo en: https://$(shell tailscale status | grep fusepong | awk '{print $$1}' | sed 's/\.$$//').ts.net/"
+	@echo "→ Funnel habilitado. Accede desde https://fusepong.tail*.ts.net/"
+
 
