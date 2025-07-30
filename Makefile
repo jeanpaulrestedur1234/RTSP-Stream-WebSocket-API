@@ -7,19 +7,19 @@ K8S_DIR=k8s
 # Docker Compose (local)
 # -------------------------
 build:
-	docker-compose build
+	docker compose build
 
 up:
-	docker-compose up -d
+	docker compose up -d
 
 logs:
-	docker-compose logs -f
+	docker compose logs -f
 
 stop:
-	docker-compose down
+	docker compose down
 
 restart:
-	docker-compose down && docker-compose up -d
+	docker- ompose down && docker-compose up -d
 
 shell:
 	docker exec -it $(APP_NAME) bash
