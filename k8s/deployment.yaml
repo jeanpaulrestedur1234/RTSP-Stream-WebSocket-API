@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtsp-websocket
+  labels:
+    app: rtsp-websocket
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rtsp-websocket
+  template:
+    metadata:
+      labels:
+        app: rtsp-websocket
+    spec:
+      containers:
+        - name: rtsp-websocket
+          image: rtsp-websocket:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: TZ
+              value: "America/Bogota"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30

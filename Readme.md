@@ -92,6 +92,28 @@ Accede desde cualquier navegador o app compatible vía Tailscale.
 
 ---
 
+---
+
+## ☸️ Despliegue con Kubernetes y Minikube
+
+> Este proyecto soporta despliegue en clústeres locales Kubernetes usando Minikube con imágenes Docker locales.
+
+### 🧱 Construcción y despliegue
+
+```bash
+# 1. Construir imagen en el entorno de Minikube
+make k8s-build
+
+# 2. Aplicar los manifiestos Kubernetes
+make k8s-deploy
+
+# 3. Ver el estado de los pods
+make k8s-status
+
+# 4. Acceder al servicio vía navegador
+make k8s-access
+```
+
 ## 🔌 Conexión WebSocket
 
 ```js

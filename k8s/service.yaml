@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtsp-websocket
+  labels:
+    app: rtsp-websocket
+spec:
+  type: NodePort
+  selector:
+    app: rtsp-websocket
+  ports:
+    - protocol: TCP
+      port: 8000       # puerto interno del servicio
+      targetPort: 8000 # puerto del contenedor
+      nodePort: 30080  # puerto en tu host (puedes elegir entre 30000–32767)
