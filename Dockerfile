@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código fuente
 COPY app/ app/
 
+# ✅ Copiar tests y otros archivos raíz necesarios
+COPY tests/ tests/
+
 # Puerto expuesto
 EXPOSE 8000
 
