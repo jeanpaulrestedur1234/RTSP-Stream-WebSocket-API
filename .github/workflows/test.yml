@@ -15,7 +15,7 @@ jobs:
     - name: Set up Docker
       run: |
         docker --version
-        docker-compose --version
+        docker compose version  # <-- corregido aquí
 
     - name: Build Docker image
       run: |
@@ -27,7 +27,7 @@ jobs:
 
     - name: Wait for app to initialize
       run: |
-        sleep 5  # o reemplázalo con un healthcheck si tienes uno en docker-compose
+        sleep 5  # o usa healthcheck
 
     - name: Run tests inside container
       run: |
